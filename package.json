@@ -4,6 +4,9 @@
   "main": "index.js",
   "author": "strobie <0xstrobe@protonmail.com>",
   "license": "MIT",
+  "scripts": {
+    "start": "tsx main.ts"
+  },
   "devDependencies": {
     "@types/node": "^18.11.18",
     "prettier": "^2.8.2",
