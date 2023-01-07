@@ -33,8 +33,9 @@ const server = http.createServer();
 
 server.on("request", (request, response) => {
   const headers = request.headers;
-  const url = new URL(request.url!);
-  const pathname = url.pathname;
+  // const url = new URL(request.url!);
+  // const pathname = url.pathname;
+  const pathname = request.url!;
   console.log(pathname);
 
   let body = "";
