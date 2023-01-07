@@ -1,8 +1,9 @@
 import "dotenv/config";
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import http from "http";
 
-import Fastify from "fastify";
-const fastify = Fastify({ logger: true });
+const hostname = "0.0.0.0";
+const port = 3000;
 
 const S3_ENDPOINT = process.env.S3_ENDPOINT!;
 const S3_BUCKET = process.env.S3_BUCKET!;
@@ -28,48 +29,67 @@ interface DeleteHeaders {
   "service-key": string;
 }
 
-fastify.put<{ Headers: UploadHeaders }>("/*", async (request, reply) => {
-  const path = (request.params as { "*": string })["*"];
-  const { "content-type": contentType, "service-key": serviceKey } = request.headers;
+const server = http.createServer();
 
-  if (serviceKey !== SERVICE_KEY) {
-    reply.status(403).send({ message: "Invalid service key" });
+server.on("request", (request, response) => {
+  const headers = request.headers;
+  const url = new URL(request.url!);
+  const pathname = url.pathname;
+  console.log(pathname);
+
+  let body = "";
+
+  if (headers["service-key"] !== SERVICE_KEY) {
+    response.statusCode = 403;
+    response.end();
     return;
   }
 
-  const command = new PutObjectCommand({
-    Bucket: S3_BUCKET,
-    Key: path,
-    Body: request.body as any,
-    ContentType: contentType,
+  request.on("error", (error) => {
+    console.error(error);
+
+    response.statusCode = 500;
+    response.end();
   });
 
-  await S3.send(command);
-  reply.status(200).send({ message: "OK" });
+  if (request.method === "PUT") {
+    request.on("data", (chunk) => {
+      body += chunk;
+    });
+
+    request.on("end", async () => {
+      const command = new PutObjectCommand({
+        Bucket: S3_BUCKET,
+        Key: pathname,
+        Body: body,
+        ContentType: headers["content-type"] as string,
+      });
+      const sent = await S3.send(command);
+      console.log(sent);
+      response.statusCode = 200;
+      response.end();
+    });
+  } else if (request.method === "DELETE") {
+    request.on("end", async () => {
+      const command = new DeleteObjectCommand({
+        Bucket: S3_BUCKET,
+        Key: pathname,
+      });
+      const sent = await S3.send(command);
+      console.log(sent);
+      response.statusCode = 200;
+      response.end();
+    });
+  } else {
+    response.statusCode = 405;
+    response.end();
+  }
 });
 
-fastify.delete<{ Headers: DeleteHeaders }>("/*", async (request, reply) => {
-  const path = (request.params as { "*": string })["*"];
-  const { "service-key": serviceKey } = request.headers;
-
-  if (serviceKey !== SERVICE_KEY) {
-    reply.status(403).send({ message: "Invalid service key" });
-    return;
-  }
-
-  const command = new DeleteObjectCommand({
-    Bucket: S3_BUCKET,
-    Key: path,
-  });
-
-  await S3.send(command);
-  reply.status(200).send({ message: "OK" });
+server.on("error", (error) => {
+  console.error(error);
 });
 
-fastify.listen({ port: 3000, host: "0.0.0.0" }, (err, address) => {
-  if (err) {
-    fastify.log.error(err);
-    process.exit(1);
-  }
-  fastify.log.info(`server listening on ${address}`);
+server.listen(port, hostname, () => {
+  console.log(`Server running at http://${hostname}:${port}/`);
 });
